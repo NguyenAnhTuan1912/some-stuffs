@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Abort Controller Test !!!</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="w-full p-3">
+    <h1 class="text-3xl font-bold">Hello, welcome to AbortController test</h1>
+    <p>
+      In this test, you will send a request to AbortController Test API to get
+      the example result. And you can
+    </p>
+    <div
+      id="resultBx"
+      class="border border-2 min-h-[220px] rounded-lg mt-3 p-3 bg-gray-100"
+    ></div>
+    <div class="mt-3">
+      <button
+        id="requestBtn"
+        class="cursor-pointer px-3 py-2 border border-2 rounded-lg hover:bg-gray-100"
+      >
+        Request
+      </button>
+      <button
+        id="abortBtn"
+        class="cursor-pointer px-3 py-2 border border-2 rounded-lg hover:bg-red-100"
+      >
+        Abort
+      </button>
+    </div>
+    <script defer>
+      const resultBx = document.getElementById("resultBx"),
+        requestBtn = document.getElementById("requestBtn"),
+        abortBtn = document.getElementById("abortBtn");
+
+      let abortCtrl;
+
+      function createErrorText(text) {
+        const p = document.createElement("p");
+        p.textContent = text;
+        p.classList.add("text-red-500");
+        return p;
+      }
+
+      function createSuccessfullText(text) {
+        const p = document.createElement("p");
+        p.textContent = text;
+        p.classList.add("text-green-500");
+        return p;
+      }
+
+      function createText(text) {
+        const p = document.createElement("p");
+        p.textContent = text;
+        return p;
+      }
+
+      function renderNewContent(parent, ...elements) {
+        parent.replaceChildren();
+        parent.append(...elements);
+      }
+
+      function sendRequest() {
+        abortCtrl = new AbortController();
+        const response = fetch("http://localhost:3030/heavy-task", {
+          signal: abortCtrl.signal,
+        });
+        return response;
+      }
+
+      function abortRequest(abortCtrl) {
+        if (!abortCtrl) {
+          // Update result box
+          renderNewContent(
+            resultBx,
+            createErrorText("You're not sending any request!")
+          );
+          return;
+        }
+        abortCtrl.abort(
+          new Error("Abort the request to http://localhost:3030/heavy-task")
+        );
+        abortCtrl = null;
+
+        // Update result box
+        renderNewContent(
+          resultBx,
+          createErrorText(
+            "You aborted the request to http://localhost:3030/heavy-task"
+          )
+        );
+      }
+
+      abortBtn.addEventListener("click", function () {
+        abortRequest(abortCtrl);
+      });
+
+      requestBtn.addEventListener("click", function () {
+        // Update result box
+        let sec = 0;
+        renderNewContent(
+          resultBx,
+          createText(`Waiting for response from server ... [${sec}s passed]`)
+        );
+        let interval = setInterval(() => {
+          sec += 1;
+          renderNewContent(
+            resultBx,
+            createText(`Waiting for response from server ... [${sec}s passed]`)
+          );
+        }, 1000);
+
+        sendRequest()
+          .then((res) => res.json())
+          .then((result) => {
+            renderNewContent(
+              resultBx,
+              createSuccessfullText(JSON.stringify(result))
+            );
+          })
+          .catch((error) => {
+            renderNewContent(resultBx, createErrorText(error.message));
+          })
+          .finally(() => {
+            clearInterval(interval);
+            abortCtrl = null;
+          });
+      });
+    </script>
+  </body>
+</html>

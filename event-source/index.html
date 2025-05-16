@@ -4,6 +4,89 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EventSource Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   </head>
-  <body></body>
+  <body class="w-full screen">
+    <h1 class="text-center font-bold text-3xl">EventSource</h1>
+    <div class="w-full flex justify-center my-3">
+      <button
+        class="rounded-lg bg-blue-500 text-white px-3 py-2 cursor-pointer me-3"
+        id="sendReqBtn"
+      >
+        Send request
+      </button>
+      <button
+        class="rounded-lg bg-red-500 text-white px-3 py-2 cursor-pointer me-3"
+        id="stopBtn"
+      >
+        Stop
+      </button>
+      <button
+        class="rounded-lg bg-gray-500 text-white px-3 py-2 cursor-pointer"
+        id="clearBtn"
+      >
+        Clear
+      </button>
+    </div>
+    <div
+      id="resultWrapper"
+      class="w-full flex flex-col items-center justify-center"
+    >
+      <p>Click send request to request the send event to server</p>
+      <p>And here is the result</p>
+      <ol id="resultList" class="w-full max-w-[480px] bg-red-50"></ol>
+    </div>
+  </body>
+  <script>
+    const apiURL = "http://localhost:12000";
+    const resultList = document.getElementById("resultList");
+    const sendReqBtn = document.getElementById("sendReqBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    /** @type {EventSource} */
+    let _GSSE;
+
+    function createListItem(content) {
+      const li = document.createElement("li");
+
+      li.textContent = content;
+
+      return li;
+    }
+
+    async function requestSendEvent() {
+      const sse = new EventSource(`${apiURL}/event`);
+
+      sse.addEventListener("open", () => {
+        console.log(
+          "The event connection is opended, will receive data in milisec later..."
+        );
+      });
+
+      sse.addEventListener("message", (e) => {
+        console.log("`Message:", e.data);
+        resultList.append(createListItem(`Message: ${e.data}`));
+      });
+
+      sse.addEventListener("error", (e) => {
+        console.error("An error is occured, close the connection");
+        sse.close();
+      });
+
+      return sse;
+    }
+
+    sendReqBtn.addEventListener("click", () => {
+      if (!_GSSE) requestSendEvent().then((event) => (_GSSE = event));
+    });
+
+    stopBtn.addEventListener("click", () => {
+      _GSSE.close();
+    });
+
+    clearBtn.addEventListener("click", () => {
+      resultList.replaceChildren();
+    });
+  </script>
 </html>
