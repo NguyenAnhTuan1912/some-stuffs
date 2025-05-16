@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Indexed DB</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  </head>
+  <body class="w-full h-screen">
+    <main class="w-full max-w-[720px] mx-auto">
+      <div id="result"></div>
+      <form id="form">
+        <div class="flex flex-col mb-3">
+          <label class="cursor-pointer" for="owner">Name of owner</label>
+          <input
+            class="px-3 py-2 border rounded-lg"
+            placeholder="Owner"
+            type="text"
+            name="owner"
+            id="owner"
+          />
+        </div>
+        <div class="flex flex-col mb-3">
+          <label class="cursor-pointer" for="owner">Age of owner</label>
+          <input
+            class="px-3 py-2 border rounded-lg"
+            type="number"
+            name="age"
+            id="age"
+            min="18"
+            max="60"
+            step="1"
+            value="18"
+          />
+        </div>
+        <div class="w-full flex items-center">
+          <button
+            data-action="create"
+            class="px-3 py-2 bg-blue-500 rounded-lg text-white cursor-pointer me-3"
+            type="submit"
+          >
+            Submit
+          </button>
+          <button
+            id="refreshBtn"
+            class="px-3 py-2 bg-red-500 rounded-lg text-white cursor-pointer"
+            type="button"
+          >
+            Refresh
+          </button>
+        </div>
+      </form>
+    </main>
+  </body>
+  <script defer>
+    const INFO_KEY = "info";
+    const DB_NAME = "myapp";
+    const STORE_NAME = "users";
+
+    class CacheLS {
+      constructor() {}
+
+      read(key) {
+        const data = window.localStorage.getItem(key);
+
+        return data ? JSON.parse(data) : data;
+      }
+
+      write(key, data) {
+        if (typeof data !== "object")
+          throw new Error("Data must be an plain object");
+
+        window.localStorage.setItem(key, JSON.stringify(data));
+      }
+    }
+
+    class CacheIdxDB {
+      constructor() {
+        const request = window.indexedDB.open(DB_NAME);
+
+        /** @type {IDBDatabase} */
+        this._instance = null;
+        this._canUse = false;
+        this._storeHolder = [];
+
+        let that = this;
+
+        request.onsuccess = (event) => {
+          console.log("Initialize a database successfully");
+          that._instance = event.target.result;
+          that._canUse = true;
+        };
+
+        request.onerror = (event) => {
+          console.error("Why didn't you allow my web app to use IndexedDB?!");
+        };
+
+        request.onupgradeneeded = (event) => {
+          that._instance = event.target.result;
+
+          // Create an object store (like table or collection)
+          const objectStore = that._instance.createObjectStore(STORE_NAME, {
+            keyPath: "id",
+          });
+
+          // Listen an event on objectStore to make sure
+          // the creation of objectStore is done
+          objectStore.transaction.oncomplete = (event) => {
+            that._canUse = true;
+
+            // Check storeHolder
+            if (that._storeHolder.length > 0) {
+              const usersObjectStore = that._instance
+                .transaction(STORE_NAME, "readwrite")
+                .objectStore(STORE_NAME);
+
+              for (const item of that._storeHolder) {
+                usersObjectStore.add(item);
+              }
+            }
+          };
+        };
+      }
+
+      async read(key) {
+        if (!this._canUse)
+          throw new Error("The database is being initialized, please wait");
+
+        return new Promise((res, rej) => {
+          const usersObjectStore = this._instance
+            .transaction(STORE_NAME, "readonly")
+            .objectStore(STORE_NAME);
+
+          const request = usersObjectStore.get(key);
+          request.onerror = (event) => {
+            console.error(`Cannot find any entities with key: ${key}`);
+            rej(undefined);
+          };
+
+          request.onsuccess = (event) => {
+            res(event.target.result);
+          };
+        });
+      }
+
+      async write(data) {
+        if (!this._canUse) {
+          this._storeHolder.push(data);
+          return;
+        }
+
+        const item = await this.read(data.id);
+
+        if (item) {
+          return new Promise((res, rej) => {
+            const usersObjectStore = this._instance
+              .transaction(STORE_NAME, "readwrite")
+              .objectStore(STORE_NAME);
+
+            const request = usersObjectStore.put(data);
+            request.onerror = (event) => {
+              console.error(`Cannot update data: ${JSON.stringify(data)}`);
+              rej(false);
+            };
+
+            request.onsuccess = (event) => {
+              res(true);
+            };
+          });
+        }
+
+        return new Promise((res, rej) => {
+          const usersObjectStore = this._instance
+            .transaction(STORE_NAME, "readwrite")
+            .objectStore(STORE_NAME);
+
+          const request = usersObjectStore.add(data);
+          request.onerror = (event) => {
+            console.error(`Cannot add new data: ${JSON.stringify(data)}`);
+            rej(false);
+          };
+
+          request.onsuccess = (event) => {
+            res(true);
+          };
+        });
+      }
+
+      async wait() {
+        const that = this;
+
+        return new Promise((res, rej) => {
+          let it = setInterval(() => {
+            console.log("Check database initialization:", that._canUse);
+            if (that._canUse) {
+              clearInterval(it);
+              res(true);
+            }
+          }, 10);
+        });
+      }
+    }
+
+    const form = document.getElementById("form");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const cacheO = new CacheLS();
+    const cacheIdxDb = new CacheIdxDB();
+
+    const information = {
+      id: 0,
+      owner: "Nguyen Anh Tuan",
+      age: 22,
+    };
+
+    // Local storage
+    // const info = cacheO.read(INFO_KEY) || information;
+
+    // // Load data
+    // form["owner"].value = info.owner;
+    // form["age"].value = info.age;
+
+    // IndexedDB
+    (async function () {
+      // Wait database
+      await cacheIdxDb.wait();
+
+      const data = (await cacheIdxDb.read(0)) || information;
+
+      form["owner"].value = data.owner;
+      form["age"].value = data.age;
+    })();
+
+    // Load content to form
+    refreshBtn.addEventListener("click", function () {
+      window.location.reload();
+    });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      let _form = e.currentTarget;
+      const ownerInput = _form["owner"],
+        ageInput = _form["age"];
+
+      const data = {
+        id: 0,
+        owner: ownerInput.value,
+        age: ageInput.value,
+      };
+
+      // Save to local storage
+      // cacheO.write(INFO_KEY, data);
+
+      // Save to indexed db
+      cacheIdxDb.write(data).then(() => {
+        _form.reset();
+      });
+    });
+  </script>
+</html>

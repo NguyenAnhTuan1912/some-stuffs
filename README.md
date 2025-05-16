@@ -1,0 +1,3 @@
+# Some stuffs
+
+Đây là repo mà mình sẽ học một số thứ hay hay về Web Development, Backend Development, Cloud, ...
